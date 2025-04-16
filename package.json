@@ -1,0 +1,17 @@
+{
+  "name": "react400",
+  "version": "1.0.0",
+  "description": "## TL;DR;",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.4.5",
+    "vite": "^6.2.6"
+  }
+}
