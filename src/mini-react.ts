@@ -1,11 +1,87 @@
-type VirtualElementType = string | Function
+// 抽象クラス
+abstract class Component {
+  props: Record<string, unknown>
+  abstract state: unknown
+  abstract setState: (value: unknown) => void
+  abstract render: () => VirtualElement
 
-type VirtualElement = {
+  constructor(props: Record<string, unknown>) {
+    this.props = props
+  }
+
+  static REACT_COMPONENT = true
+}
+
+interface ComponentFunction {
+  new (props: Record<string, unknown>): Component
+  (props: Record<string, unknown>): VirtualElement | string
+}
+
+type VirtualElementType = ComponentFunction | string
+
+interface VirtualElementProps {
+  children?: VirtualElement[]
+  [propName: string]: unknown
+}
+
+interface VirtualElement {
   type: VirtualElementType
-  props: {
-    [key: string]: unknown
+  props: VirtualElementProps
+}
+
+type FiberNodeDom = Element | Text | null | undefined
+interface FiberNode<S = any> extends VirtualElement {
+  alternate: FiberNode | null
+  dom?: FiberNodeDom
+  effectTag?: string
+  child?: FiberNode
+  return?: FiberNode
+  sibling?: FiberNode
+  hooks?: {
+    state: S
+    queue: S[]
   }
 }
+
+let wipRoot: FiberNode | null = null
+let nextUnitOfWork: FiberNode | null = null
+let currentRoot: FiberNode | null = null
+let deletions: FiberNode[] = []
+let wipFiber: FiberNode
+let hookIndex = 0
+
+// React.Fragmentをサポート
+const Fragment = Symbol.for("react.fragment")
+
+// 形式は即時実行関数(IIFE)で、最後に(window)を書くことで、直前の関数の引数にwindowを渡し、即時実行している
+;((global: Window) => {
+  const id = 1
+  const fps = 1e3 / 60
+  let frameDeadline: number = 0
+  let pendingCallback: IdleRequestCallback = () => {}
+  const channel = new MessageChannel()
+  const timeRemaining = () => frameDeadline - window.performance.now()
+
+  const deadline = {
+    didTimeout: false,
+    timeRemaining,
+  }
+
+  channel.port2.onmessage = () => {
+    if (typeof pendingCallback === "function") {
+      pendingCallback(deadline)
+    }
+  }
+
+  global.requestIdleCallback = (callback: IdleRequestCallback) => {
+    global.requestAnimationFrame((frameTime) => {
+      frameDeadline = frameTime + fps
+      pendingCallback = callback
+      channel.port1.postMessage(null)
+    })
+    return id
+  }
+})(window)
 
 // 引数がVirtualElementかどうかを判定する関数
 const isVirtualELement = (e: unknown): e is VirtualElement =>
