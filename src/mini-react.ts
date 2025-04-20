@@ -40,7 +40,7 @@ interface FiberNode<S = any> extends VirtualElement {
   hooks?: {
     state: S
     queue: S[]
-  }
+  }[]
 }
 
 let wipRoot: FiberNode | null = null
@@ -336,8 +336,55 @@ const reconcileChildren = (
     }
 
     prevSibling = newFiber
-    index++
+    index += 1
   }
+}
+
+const useState = <S>(initialState: S): [S, (value: S) => void] => {
+  const fiberNode: FiberNode<S> = wipFiber
+  const hook: {
+    state: S
+    queue: S[]
+  } = fiberNode?.alternate?.hooks
+    ? fiberNode.alternate.hooks[hookIndex]
+    : {
+        state: initialState,
+        queue: [],
+      }
+
+  while (hook.queue.length) {
+    let newState = hook.queue.shift()
+    if (isPlainObject(hook.state) && isPlainObject(newState)) {
+      newState = { ...hook.state, ...newState }
+    }
+    if (isDef(newState)) {
+      hook.state = newState
+    }
+  }
+
+  if (typeof fiberNode.hooks === "undefined") {
+    fiberNode.hooks = []
+  }
+
+  fiberNode.hooks.push(hook)
+  hookIndex += 1
+
+  const setState = (value: S) => {
+    hook.queue.push(value)
+    if (currentRoot) {
+      wipRoot = {
+        type: currentRoot.type,
+        props: currentRoot.props,
+        dom: currentRoot.dom,
+        alternate: currentRoot,
+      }
+      nextUnitOfWork = wipRoot
+      deletions = []
+      currentRoot = null
+    }
+  }
+
+  return [hook.state, setState]
 }
 
 const performUnitOfWork = (fiberNode: FiberNode): FiberNode | null => {
@@ -345,8 +392,61 @@ const performUnitOfWork = (fiberNode: FiberNode): FiberNode | null => {
   switch (typeof type) {
     case "function": {
       wipFiber = fiberNode
+      // @ts-ignore
+      wipFiber.hooks = []
+      hookIndex = 0
+      let children: ReturnType<ComponentFunction>
+
+      if (Object.getPrototypeOf(type).REACT_COMPONENT) {
+        const C = type
+        const component = new C(fiberNode.props)
+        const [state, setState] = useState(component.state)
+        component.props = fiberNode.props
+        component.state = state
+        component.setState = setState
+        children = component.render.bind(component)()
+      } else {
+        children = type(fiberNode.props)
+      }
+      reconcileChildren(fiberNode, [
+        isVirtualElement(children)
+          ? children
+          : createTextElement(String(children)),
+      ])
+      break
     }
+    case "number":
+    case "string":
+      if (!fiberNode.dom) {
+        fiberNode.dom = createDOM(fiberNode)
+      }
+      reconcileChildren(fiberNode, fiberNode.props.children)
+      break
+    case "symbol":
+      if (type === Fragment) {
+        reconcileChildren(fiberNode, fiberNode.props.children)
+      }
+      break
+    default:
+      if (typeof fiberNode.props !== "undefined") {
+        reconcileChildren(fiberNode, fiberNode.props.children)
+      }
+      break
   }
+
+  if (fiberNode.child) {
+    return fiberNode.child
+  }
+  let nextFiberNode: FiberNode | undefined = fiberNode
+
+  while (typeof nextFiberNode !== "undefined") {
+    if (nextFiberNode.sibling) {
+      return nextFiberNode.sibling
+    }
+    nextFiberNode = nextFiberNode.return
+  }
+
+  return null
 }
 
 const render = (element, container) => {
