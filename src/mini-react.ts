@@ -138,44 +138,24 @@ const updateDOM = (
 // typeとpropsを持つDOMを作成する関数
 // DOMが存在したら、そのプロパティも更新して、
 // 最終的にDOMを返す関数
-// const createDOM = (fiberNode) => {
-//   const { type, props } = fiberNode
-//   let DOM: FiberNodeDOM = null
-
-//   // typeが"TEXT"の場合はTextNodeを作成する
-//   if (type === "TEXT") {
-//     DOM = document.createTextNode("")
-//   } else if (typeof type === "string") {
-//     // typeが"TEXT"でない場合は、DOMを作成する
-//     // typeがstringの場合は、createElementを実行する
-//     DOM = document.createElement(type)
-//   } else {
-//     console.error("Unsupported type in createDOM:", type)
-//     console.log(typeof type)
-//   }
-
-//   if (DOM !== null) {
-//     // DOMのプロパティを更新している
-//     updateDOM(DOM, {}, props)
-//   }
-
-//   return DOM
-// }
-
-const createDOM = (fiberNode: FiberNode): FiberNodeDOM => {
+const createDOM = (fiberNode) => {
   const { type, props } = fiberNode
   let DOM: FiberNodeDOM = null
 
+  // typeが"TEXT"の場合はTextNodeを作成する
   if (type === "TEXT") {
     DOM = document.createTextNode("")
   } else if (typeof type === "string") {
+    // typeが"TEXT"でない場合は、DOMを作成する
+    // typeがstringの場合は、createElementを実行する
     DOM = document.createElement(type)
   } else {
-    return null
+    console.error("Unsupported type in createDOM:", type)
+    console.log(typeof type)
   }
 
-  // Update properties based on props after creation.
   if (DOM !== null) {
+    // DOMのプロパティを更新している
     updateDOM(DOM, {}, props)
   }
 
