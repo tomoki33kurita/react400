@@ -1,17 +1,3 @@
-// 抽象クラス
-abstract class Component {
-  props: Record<string, unknown>
-  abstract state: unknown
-  abstract setState: (value: unknown) => void
-  abstract render: () => VirtualElement
-
-  constructor(props: Record<string, unknown>) {
-    this.props = props
-  }
-
-  static REACT_COMPONENT = true
-}
-
 interface ComponentFunction {
   new (props: Record<string, unknown>): Component
   (props: Record<string, unknown>): VirtualElement | string
@@ -29,10 +15,10 @@ interface VirtualElement {
   props: VirtualElementProps
 }
 
-type FiberNodeDom = Element | Text | null | undefined
+type FiberNodeDOM = Element | Text | null | undefined
 interface FiberNode<S = any> extends VirtualElement {
   alternate: FiberNode | null
-  dom?: FiberNodeDom
+  dom?: FiberNodeDOM
   effectTag?: string
   child?: FiberNode
   return?: FiberNode
@@ -118,33 +104,31 @@ const createElement = (
 }
 
 // DOMを更新する関数
-const updateDOM = (DOM, prevProps, nextProps) => {
+const updateDOM = (
+  DOM: NonNullable<FiberNodeDOM>,
+  prevProps: VirtualElementProps,
+  nextProps: VirtualElementProps
+) => {
   const defaultPropKeys = "children"
 
-  // prevPropsをループして、removeEventListenerを実行
   for (const [removePropKey, removePropValue] of Object.entries(prevProps)) {
-    // keyが"on"で始まる場合はremoveEventListenerを実行
-    // とにかく、removePropKeyが"on"で始まる場合はremoveEventListenerを実行する
     if (removePropKey.startsWith("on")) {
       DOM.removeEventListener(
-        removePropKey.substr(2).toLowerCase(),
-        removePropValue
+        removePropKey.slice(2).toLowerCase(),
+        removePropValue as EventListener
       )
-    }
-    // removePropKeyがdefaultPropKeysでない場合は、DOMのプロパティを空にする
-    if (removePropKey !== defaultPropKeys) {
+    } else if (removePropKey !== defaultPropKeys) {
       DOM[removePropKey] = ""
     }
   }
 
-  // nextPropsをループして、addEventListenerを実行
   for (const [addPropKey, addPropValue] of Object.entries(nextProps)) {
-    // keyが"on"で始まる場合はaddEventListenerを実行
     if (addPropKey.startsWith("on")) {
-      DOM.addEventListener(addPropKey.substr(2).toLowerCase(), addPropValue)
-    }
-    // addPropKeyがdefaultPropKeysでない場合は、DOMのプロパティを更新する
-    if (addPropKey !== defaultPropKeys) {
+      DOM.addEventListener(
+        addPropKey.slice(2).toLowerCase(),
+        addPropValue as EventListener
+      )
+    } else if (addPropKey !== defaultPropKeys) {
       DOM[addPropKey] = addPropValue
     }
   }
@@ -154,22 +138,44 @@ const updateDOM = (DOM, prevProps, nextProps) => {
 // typeとpropsを持つDOMを作成する関数
 // DOMが存在したら、そのプロパティも更新して、
 // 最終的にDOMを返す関数
-const createDOM = (fiberNode) => {
-  const { type, props } = fiberNode
-  let DOM: HTMLElement | Text | null = null
+// const createDOM = (fiberNode) => {
+//   const { type, props } = fiberNode
+//   let DOM: FiberNodeDOM = null
 
-  // typeが"TEXT"の場合はTextNodeを作成する
+//   // typeが"TEXT"の場合はTextNodeを作成する
+//   if (type === "TEXT") {
+//     DOM = document.createTextNode("")
+//   } else if (typeof type === "string") {
+//     // typeが"TEXT"でない場合は、DOMを作成する
+//     // typeがstringの場合は、createElementを実行する
+//     DOM = document.createElement(type)
+//   } else {
+//     console.error("Unsupported type in createDOM:", type)
+//     console.log(typeof type)
+//   }
+
+//   if (DOM !== null) {
+//     // DOMのプロパティを更新している
+//     updateDOM(DOM, {}, props)
+//   }
+
+//   return DOM
+// }
+
+const createDOM = (fiberNode: FiberNode): FiberNodeDOM => {
+  const { type, props } = fiberNode
+  let DOM: FiberNodeDOM = null
+
   if (type === "TEXT") {
     DOM = document.createTextNode("")
-  }
-  // typeが"TEXT"でない場合は、DOMを作成する
-  // typeがstringの場合は、createElementを実行する
-  if (typeof type === "string") {
+  } else if (typeof type === "string") {
     DOM = document.createElement(type)
+  } else {
+    return null
   }
-  // ここまでで、DOMが存在したら、更新処理を実行する
+
+  // Update properties based on props after creation.
   if (DOM !== null) {
-    // DOMのプロパティを更新している
     updateDOM(DOM, {}, props)
   }
 
@@ -206,8 +212,8 @@ const commitRoot = () => {
 
   // DOMを消す関数
   const commitDeletion = (
-    parentDOM: FiberNodeDom,
-    DOM: NonNullable<FiberNodeDom>
+    parentDOM: FiberNodeDOM,
+    DOM: NonNullable<FiberNodeDOM>
   ) => {
     if (isDef(parentDOM)) {
       // parentDOMが存在する場合は、DOMを削除する
@@ -218,8 +224,8 @@ const commitRoot = () => {
 
   // DOMを置き換える関数
   const commitReplacement = (
-    parentDOM: FiberNodeDom,
-    DOM: NonNullable<FiberNodeDom>
+    parentDOM: FiberNodeDOM,
+    DOM: NonNullable<FiberNodeDOM>
   ) => {
     if (isDef(parentDOM)) {
       // parentDOMが存在する場合は、DOMを置き換える
@@ -331,7 +337,6 @@ const reconcileChildren = (
     if (index === 0) {
       fiberNode.child = newFiber
     } else if (typeof prevSibling !== "undefined") {
-      // @ts-ignore
       prevSibling.sibling = newFiber
     }
 
@@ -340,59 +345,11 @@ const reconcileChildren = (
   }
 }
 
-const useState = <S>(initialState: S): [S, (value: S) => void] => {
-  const fiberNode: FiberNode<S> = wipFiber
-  const hook: {
-    state: S
-    queue: S[]
-  } = fiberNode?.alternate?.hooks
-    ? fiberNode.alternate.hooks[hookIndex]
-    : {
-        state: initialState,
-        queue: [],
-      }
-
-  while (hook.queue.length) {
-    let newState = hook.queue.shift()
-    if (isPlainObject(hook.state) && isPlainObject(newState)) {
-      newState = { ...hook.state, ...newState }
-    }
-    if (isDef(newState)) {
-      hook.state = newState
-    }
-  }
-
-  if (typeof fiberNode.hooks === "undefined") {
-    fiberNode.hooks = []
-  }
-
-  fiberNode.hooks.push(hook)
-  hookIndex += 1
-
-  const setState = (value: S) => {
-    hook.queue.push(value)
-    if (currentRoot) {
-      wipRoot = {
-        type: currentRoot.type,
-        props: currentRoot.props,
-        dom: currentRoot.dom,
-        alternate: currentRoot,
-      }
-      nextUnitOfWork = wipRoot
-      deletions = []
-      currentRoot = null
-    }
-  }
-
-  return [hook.state, setState]
-}
-
 const performUnitOfWork = (fiberNode: FiberNode): FiberNode | null => {
   const { type } = fiberNode
   switch (typeof type) {
     case "function": {
       wipFiber = fiberNode
-      // @ts-ignore
       wipFiber.hooks = []
       hookIndex = 0
       let children: ReturnType<ComponentFunction>
@@ -461,25 +418,83 @@ const workLoop = (deadline: IdleDeadline) => {
   window.requestIdleCallback(workLoop)
 }
 
-const render = (element, container) => {
-  // DOMを作る
-  const DOM = createDOM(element)
+const render = (element: VirtualElement, container: Element) => {
+  currentRoot = null
+  ;(wipRoot = {
+    type: "div",
+    dom: container,
+    props: {
+      children: [{ ...element }],
+    },
+    alternate: currentRoot,
+  }),
+    (nextUnitOfWork = wipRoot)
+  deletions = []
+}
 
-  // 引数elementのprops.childrenをループ
-  if (Array.isArray(element.props.children)) {
-    for (const child of element.props.children) {
-      // childがVirtualElementであれば、再帰的にrenderを実行する
-      // そうでなければ、
-      render(child, DOM)
+// 抽象クラス
+abstract class Component {
+  props: Record<string, unknown>
+  abstract state: unknown
+  abstract setState: (value: unknown) => void
+  abstract render: () => VirtualElement
+
+  constructor(props: Record<string, unknown>) {
+    this.props = props
+  }
+
+  static REACT_COMPONENT = true
+}
+
+const useState = <S>(initialState: S): [S, (value: S) => void] => {
+  const fiberNode: FiberNode<S> = wipFiber
+  const hook: {
+    state: S
+    queue: S[]
+  } = fiberNode?.alternate?.hooks
+    ? fiberNode.alternate.hooks[hookIndex]
+    : {
+        state: initialState,
+        queue: [],
+      }
+
+  while (hook.queue.length) {
+    let newState = hook.queue.shift()
+    if (isPlainObject(hook.state) && isPlainObject(newState)) {
+      newState = { ...hook.state, ...newState }
+    }
+    if (isDef(newState)) {
+      hook.state = newState
     }
   }
 
-  // containerにDOMを追加する
-  container.appendChild(DOM)
+  if (typeof fiberNode.hooks === "undefined") {
+    fiberNode.hooks = []
+  }
+
+  fiberNode.hooks.push(hook)
+  hookIndex += 1
+
+  const setState = (value: S) => {
+    hook.queue.push(value)
+    if (currentRoot) {
+      wipRoot = {
+        type: currentRoot.type,
+        props: currentRoot.props,
+        dom: currentRoot.dom,
+        alternate: currentRoot,
+      }
+      nextUnitOfWork = wipRoot
+      deletions = []
+      currentRoot = null
+    }
+  }
+
+  return [hook.state, setState]
 }
 
 void (function main() {
   window.requestIdleCallback(workLoop)
 })()
 
-export { createElement, render, useState, Component, Fragment }
+export default { createElement, render, useState, Component, Fragment }
