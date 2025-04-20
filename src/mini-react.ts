@@ -449,6 +449,18 @@ const performUnitOfWork = (fiberNode: FiberNode): FiberNode | null => {
   return null
 }
 
+const workLoop = (deadline: IdleDeadline) => {
+  while (nextUnitOfWork && deadline.timeRemaining() > 1) {
+    nextUnitOfWork = performUnitOfWork(nextUnitOfWork)
+  }
+
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot()
+  }
+
+  window.requestIdleCallback(workLoop)
+}
+
 const render = (element, container) => {
   // DOMを作る
   const DOM = createDOM(element)
@@ -466,4 +478,8 @@ const render = (element, container) => {
   container.appendChild(DOM)
 }
 
-// useStateを実装する L414-
+void (function main() {
+  window.requestIdleCallback(workLoop)
+})()
+
+export { createElement, render, useState, Component, Fragment }
