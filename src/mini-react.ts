@@ -271,6 +271,9 @@ const commitRoot = () => {
     commitWork(wipRoot.child) // ルートの子要素のfiberNodeをcommitWorkで処理していく
     currentRoot = wipRoot // 最新状態を反映
   }
+
+  // DOMに反映されたら、fiberNodeをnullにしている
+  wipRoot = null // work-in-progress rootをnullにする
 }
 
 // Reactが規定している Reconciliationを模倣した関数
